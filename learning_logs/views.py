@@ -10,19 +10,30 @@ def index(request):
     """The home page for Learning Log."""
     return render(request, 'learning_logs/index.html')
 
+
 @login_required
 def topics(request):
-    """Show all topics."""
-    topics = Topic.objects.filter(owner=request.user).order_by('date_added')
-    context = {'topics': topics}
+    """Shows all topics"""
+    # Gets public topics (renamed to topic_set to not shadow function name)
+    topic_set = Topic.objects.filter(public=True)
+    # Add private topics, if any. We save some work by not including the public
+    # topics.
+    if request.user.is_authenticated:
+        topic_set = topic_set.union(
+            Topic.objects.filter(public=False, owner=request.user)
+        ).order_by('date_added')
+
+    context = {'topics': topic_set}
     return render(request, 'learning_logs/topics.html', context)
+
 
 @login_required
 def topic(request, topic_id):
     """Show a single topic, and all its entries."""
     topic = get_object_or_404(Topic, id=topic_id)
     # Make sure the topic belongs to the current user.
-    if topic.owner != request.user:
+
+    if topic.public == 'Flase' and topic.owner != request.user:
         raise Http404
         
     entries = topic.entry_set.order_by('-date_added')
@@ -41,6 +52,12 @@ def new_topic(request):
         if form.is_valid():
             new_topic = form.save(commit=False)
             new_topic.owner = request.user
+            if 'public' in request.POST:
+               public = request.POST['public']
+            else:
+                public = False
+            if public == "True":
+                new_topic.public = True
             new_topic.save()
             return HttpResponseRedirect(reverse('learning_logs:topics'))
 
